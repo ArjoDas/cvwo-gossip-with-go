@@ -4,6 +4,7 @@ import (
     "github.com/gin-contrib/cors"
     "github.com/gin-gonic/gin"
     "github.com/arjodas/cvwo-gossip-with-go/backend/initializers"
+    "github.com/arjodas/cvwo-gossip-with-go/backend/models"
 )
 
 func init() {
@@ -20,6 +21,14 @@ func main() {
             "message": "pong",
         })
     })
+
+    initializers.DB.AutoMigrate(
+        &models.User{}, 
+        &models.Post{}, 
+        &models.Comment{}, 
+        &models.Topic{}, 
+        &models.Vote{},
+    )
 
     r.Run()
 }
