@@ -80,29 +80,57 @@ func CreatePost(c *gin.Context) {
 
 func GetPosts(c *gin.Context) {
 	var posts []models.Post
-	
-	// check URL for ?search=something
 	searchQuery := c.Query("search")
 
 	if searchQuery != "" {
 		// --- SEMANTIC SEARCH ---
-		// convert user's search query to a vector
 		queryVector, err := getEmbedding(searchQuery)
-		
+
 		if err == nil {
-			// SQL: sort by cosine distance (<=>)
-			// this finds posts that are mathematically closest in meaning
+			// get IDs sorted by Distance using RAW SQL
+			// This bypasses GORM's builder to guarantee the <=> operator is used
+			var ids []uint
+			// We select IDs where embedding exists, ordered by distance
+			if err := initializers.DB.Raw(
+				"SELECT id FROM posts WHERE embedding IS NOT NULL ORDER BY embedding <=> ? LIMIT 10", 
+				queryVector,
+			).Scan(&ids).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+				return
+			}
+
+			// If no results, return empty
+			if len(ids) == 0 {
+				c.JSON(http.StatusOK, gin.H{"posts": []models.Post{}})
+				return
+			}
+
+			// fetch the full objects (User, Topic) for these IDs
+			var unsortedPosts []models.Post
 			initializers.DB.Preload("User").Preload("Topic").
-				Order(initializers.DB.Raw("embedding <=> ?", queryVector)).
-				Limit(10).
-				Find(&posts)
+				Where("id IN ?", ids).
+				Find(&unsortedPosts)
+
+			// reconstruct the correct order in Go
+			// (Because SQL 'IN' clause destroys the order we worked so hard for)
+			postsMap := make(map[uint]models.Post)
+			for _, p := range unsortedPosts {
+				postsMap[p.ID] = p
+			}
+
+			posts = make([]models.Post, 0)
+			for _, id := range ids {
+				if p, ok := postsMap[id]; ok {
+					posts = append(posts, p)
+				}
+			}
 		} else {
-            // if OpenAI fails, fallback to standard empty list or error
-            c.JSON(http.StatusInternalServerError, gin.H{"error": "Search unavailable"})
-            return
-        }
+			// OpenAI Error Fallback
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Search unavailable"})
+			return
+		}
 	} else {
-		// normal feed (chronological)
+		// --- NORMAL FEED (Chronological) ---
 		initializers.DB.Preload("User").Preload("Topic").Order("created_at desc").Find(&posts)
 	}
 

@@ -1,0 +1,754 @@
+FILE: ./backend/middleware/requireAuth.go
+package middleware
+
+import (
+	"fmt"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/arjodas/cvwo-gossip-with-go/backend/initializers"
+	"github.com/arjodas/cvwo-gossip-with-go/backend/models"
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+)
+
+func RequireAuth(c *gin.Context) {
+	// get the cookie off req
+	tokenString, err := c.Cookie("Authorization")
+
+	if err != nil {
+		c.AbortWithStatus(http.StatusUnauthorized)	// explicitly tells gin to stop execution
+		return
+	}
+
+	// decode/validate it (boilerplate code)
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(os.Getenv("SECRET")), nil
+	})
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		// check expiration
+		if float64(time.Now().Unix()) > claims["exp"].(float64) {
+			c.AbortWithStatus(http.StatusUnauthorized)
+		}
+
+		// find the user with token sub
+		var user models.User
+		initializers.DB.First(&user, claims["sub"])
+
+		if user.ID == 0 {
+			c.AbortWithStatus(http.StatusUnauthorized)
+		}
+
+		// attach to request
+		c.Set("user", user)
+
+		// continue
+		c.Next()
+	} else {
+		c.AbortWithStatus(http.StatusUnauthorized)
+	}
+}-e 
+---
+
+FILE: ./backend/models/commentModel.go
+package models
+
+import "gorm.io/gorm"
+
+type Comment struct {
+	gorm.Model
+	Body string
+	
+  // relationships
+	UserID uint
+	User   User		// virtual field
+	
+  // optimisation: PostID exists on every comment, know post without traversing adj list
+  PostID uint 
+	Post   Post		// virtual field
+    
+  // adjacency list: recursive relationship
+	ParentID *uint // pointer allows null (top level comments have no parent)
+	Children []Comment `gorm:"foreignKey:ParentID"`
+}-e 
+---
+
+FILE: ./backend/models/userModel.go
+package models
+
+import "gorm.io/gorm"
+
+type User struct {
+	gorm.Model 	// predefined struct, allows auto inheritance of ID, CreatedAt, UpdatedAt, DeletedAt
+	// note GORM enables soft delete, if user is deleted, they become invisible to normal queries but remain in the DB
+	Username     string `gorm:"uniqueIndex"`
+	Email        string `gorm:"uniqueIndex"`
+	PasswordHash string
+	Role         string `gorm:"default:'user'"` // enforced in logic as 'user' or 'sys_admin'
+	
+	// relationships
+	Posts    []Post
+	Comments []Comment
+	Votes    []Vote
+    
+	// reverse relation for the Many-to-Many topic moderation
+	// create a join table, necessary for many2many
+	ModeratedTopics []Topic `gorm:"many2many:topic_moderators;"`
+}-e 
+---
+
+FILE: ./backend/models/postModel.go
+package models
+
+import (
+	"github.com/pgvector/pgvector-go"
+	"gorm.io/gorm"
+)
+
+type Post struct {
+	gorm.Model
+	Title  string
+	Body   string
+  // Relationships
+	UserID uint			// foreign key
+	User   User			// virtual field, filled only when called with db.Preload("User").Find...
+	TopicID uint
+	Topic   Topic
+  // Semantic Search (Vector)
+	Embedding pgvector.Vector `gorm:"type:vector(1536)"`
+}-e 
+---
+
+FILE: ./backend/models/topic.go
+package models
+
+import "gorm.io/gorm"
+
+type Topic struct {
+	gorm.Model
+	Slug        string `gorm:"uniqueIndex"` // e.g., "tech-news"
+	Title       string
+	Description string
+	
+	// Relationships
+	Posts     []Post
+	Moderators []User `gorm:"many2many:topic_moderators;"` // creates the Join Table automatically
+}
+
+// GORM will automatically create the "topic_moderators" table with topic_id and user_id columns-e 
+---
+
+FILE: ./backend/models/vote.go
+package models
+
+type Vote struct {
+	ID uint `gorm:"primaryKey"`
+    
+	// composite unique index: User cannot vote on the same target twice
+	UserID     uint   `gorm:"uniqueIndex:idx_unique_vote"`
+	TargetID   uint   `gorm:"uniqueIndex:idx_unique_vote"`
+	TargetType string `gorm:"uniqueIndex:idx_unique_vote"` // "post" or "comment"
+	
+	Value int
+}-e 
+---
+
+FILE: ./backend/controllers/topicsController.go
+package controllers
+
+import (
+	"net/http"
+
+	"github.com/arjodas/cvwo-gossip-with-go/backend/initializers"
+	"github.com/arjodas/cvwo-gossip-with-go/backend/models"
+	"github.com/gin-gonic/gin"
+)
+
+func GetTopics(c *gin.Context) {
+	var topics []models.Topic
+	initializers.DB.Find(&topics)
+	c.JSON(http.StatusOK, gin.H{"topics": topics})
+}
+
+func CreateTopic(c *gin.Context) {
+	var body struct {
+		Title       string
+		Slug        string
+		Description string
+	}
+	if c.Bind(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Bad Request"})
+		return
+	}
+
+	topic := models.Topic{Title: body.Title, Slug: body.Slug, Description: body.Description}
+	result := initializers.DB.Create(&topic)
+	if result.Error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Topic already exists?"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"topic": topic})
+}
+
+func UpdateTopic(c *gin.Context) {
+    id := c.Param("id")
+    var body struct { Title string; Description string }
+    c.Bind(&body)
+
+    var topic models.Topic
+    if err := initializers.DB.First(&topic, id).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+        return
+    }
+
+    initializers.DB.Model(&topic).Updates(models.Topic{Title: body.Title, Description: body.Description})
+    c.JSON(http.StatusOK, gin.H{"topic": topic})
+}
+
+func DeleteTopic(c *gin.Context) {
+    id := c.Param("id")
+    // Note: This might fail if you have constraints and posts attached. 
+    // GORM Soft Delete usually handles it fine.
+    initializers.DB.Delete(&models.Topic{}, id)
+    c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+}
+
+func GetTopic(c *gin.Context) {
+	id := c.Param("id")
+	var topic models.Topic
+	// Check if ID exists
+	if result := initializers.DB.First(&topic, id); result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Topic not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"topic": topic})
+}-e 
+---
+
+FILE: ./backend/controllers/usersController.go
+package controllers
+
+import (
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/arjodas/cvwo-gossip-with-go/backend/initializers"
+	"github.com/arjodas/cvwo-gossip-with-go/backend/models"
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+)
+
+func Signup(c *gin.Context) {
+	var body struct {
+		Username string
+		Email    string
+		Password string
+	}
+
+	if c.Bind(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read body"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 10)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash password"})
+		return
+	}
+
+	user := models.User{Username: body.Username, Email: body.Email, PasswordHash: string(hash)}
+	result := initializers.DB.Create(&user)
+
+	if result.Error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email or Username already taken"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "User created successfully"})
+}
+
+func Login(c *gin.Context) {
+	// get email and pass off req body
+	var body struct {
+		Email    string
+		Password string
+	}
+
+	if c.Bind(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read body"})
+		return
+	}
+
+	// look up requested user
+	var user models.User
+	initializers.DB.First(&user, "email = ?", body.Email)
+
+	if user.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email or password"})
+		return
+	}
+
+	// compare sent password with saved user password hash
+	err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(body.Password))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email or password"})
+		return
+	}
+
+	// generate a jwt token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": user.ID,
+		"exp": time.Now().Add(time.Hour * 24 * 30).Unix(), // 30 days
+	})
+
+	// sign and get the complete encoded token as a string using the secret
+	tokenString, err := token.SignedString([]byte(os.Getenv("SECRET")))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create token"})
+		return
+	}
+
+	// respond
+	// Set HttpOnly cookie and return user data.
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("Authorization", tokenString, 3600*24*30, "/", "", false, true)
+
+	c.JSON(http.StatusOK, gin.H{
+		"token": tokenString, 
+		"user": gin.H{
+			"username": user.Username,
+			"id": user.ID,
+		},
+	})
+}
+
+func Validate(c *gin.Context) {
+	user, _ := c.Get("user")
+	c.JSON(http.StatusOK, gin.H{
+		"message": "I'm logged in",
+		"user":    user,
+	})
+}-e 
+---
+
+FILE: ./backend/controllers/postsController.go
+package controllers
+
+import (
+	"context"
+	"os"
+	"net/http"
+
+	"github.com/arjodas/cvwo-gossip-with-go/backend/initializers"
+	"github.com/arjodas/cvwo-gossip-with-go/backend/models"
+	"github.com/gin-gonic/gin"
+	"github.com/pgvector/pgvector-go"
+	"github.com/sashabaranov/go-openai"
+	"gorm.io/gorm"
+)
+
+// helper: calls OpenAI to turn text into a 1536-dimensional vector
+func getEmbedding(text string) (pgvector.Vector, error) {
+	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+	resp, err := client.CreateEmbeddings(
+		context.Background(),
+		openai.EmbeddingRequest{
+			Input: []string{text},
+			Model: openai.AdaEmbeddingV2,
+		},
+	)
+	if err != nil {
+		return pgvector.NewVector(nil), err
+	}
+	return pgvector.NewVector(resp.Data[0].Embedding), nil
+}
+
+func CreatePost(c *gin.Context) {
+	// get title and body
+	var body struct {
+		Title string
+		Body  string
+		TopicID uint
+	}
+
+	if c.Bind(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid body"})
+		return
+	}
+
+	// get logged in user (set by middleware)
+	user, _ := c.Get("user")
+	currentUser := user.(models.User)
+
+	// generate embedding (concatenate title + body)
+	embedding, err := getEmbedding(body.Title + "\n" + body.Body)
+	if err != nil {
+		// if OpenAI fails, we log it but still allow the post (just without search powers)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI Engine Error: " + err.Error()})
+		return
+	}
+
+	// ensure fallback TopicID to 1
+	finalTopicID := body.TopicID
+	if finalTopicID == 0 {
+		finalTopicID = 1
+	}
+
+	// create post
+	post := models.Post{
+		Title:   body.Title,
+		Body:    body.Body,
+		UserID:  currentUser.ID,
+		TopicID: finalTopicID,
+		Embedding: embedding,
+	}
+
+	result := initializers.DB.Create(&post)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create post"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"post": post})
+}
+
+func GetPosts(c *gin.Context) {
+    var posts []models.Post
+    searchQuery := c.Query("search")
+
+    if searchQuery != "" {
+        // --- SEMANTIC SEARCH ---
+        queryVector, err := getEmbedding(searchQuery)
+
+        if err == nil {
+            // use gorm.Expr, NOT initializers.DB.Raw
+            initializers.DB.Preload("User").Preload("Topic").
+                Where("embedding IS NOT NULL").
+                Order(gorm.Expr("embedding <=> ?", queryVector)).
+                Limit(10).
+                Find(&posts)
+        } else {
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "Search unavailable"})
+            return
+        }
+    } else {
+        // normal feed
+        initializers.DB.Preload("User").Preload("Topic").Order("created_at desc").Find(&posts)
+    }
+
+    c.JSON(http.StatusOK, gin.H{"posts": posts})
+}
+
+func GetPost(c *gin.Context) {
+	// get ID from URL param (e.g. /posts/1)
+	id := c.Param("id")
+
+	var post models.Post
+	// preload (virtual fields) User AND Comments (and who wrote the comments)
+	initializers.DB.Preload("User").Preload("Topic").First(&post, id)
+
+	c.JSON(http.StatusOK, gin.H{"post": post})
+}
+
+func UpdatePost(c *gin.Context) {
+	// get ID from URL
+	id := c.Param("id")
+
+	// get Data from Body
+	var body struct {
+		Title string
+		Body  string
+	}
+	c.Bind(&body)
+
+	// find Post
+	var post models.Post
+	if err := initializers.DB.First(&post, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		return
+	}
+
+	// check Authorization (Is this your post?)
+	user, _ := c.Get("user")
+	currentUser := user.(models.User)
+	if post.UserID != currentUser.ID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authorized to edit this post"})
+		return
+	}
+
+	// update & Save
+	// MVP Note: we don't update embedding for updates to reduce complexity 
+	initializers.DB.Model(&post).Updates(models.Post{
+		Title: body.Title,
+		Body:  body.Body,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"post": post})
+}
+
+func DeletePost(c *gin.Context) {
+	id := c.Param("id")
+
+	var post models.Post
+	if err := initializers.DB.First(&post, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		return
+	}
+
+	user, _ := c.Get("user")
+	currentUser := user.(models.User)
+
+	if post.UserID != currentUser.ID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authorized to delete this post"})
+		return
+	}
+
+	initializers.DB.Delete(&post) // soft delete (sets deleted_at)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Post deleted"})
+}-e 
+---
+
+FILE: ./backend/controllers/commentsController.go
+package controllers
+
+import (
+	"net/http"
+
+	"github.com/arjodas/cvwo-gossip-with-go/backend/initializers"
+	"github.com/arjodas/cvwo-gossip-with-go/backend/models"
+	"github.com/gin-gonic/gin"
+)
+
+func CreateComment(c *gin.Context) {
+	// get body (comment text)
+	var body struct {
+		Body string
+	}
+	if c.Bind(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid body"})
+		return
+	}
+
+	// get Post ID from URL (e.g., /posts/1/comments)
+	postID := c.Param("id")
+
+	// get User from context
+	user, _ := c.Get("user")
+	currentUser := user.(models.User)
+
+	// look up the Post (to ensure it exists)
+	var post models.Post
+	if result := initializers.DB.First(&post, postID); result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		return
+	}
+
+	// create Comment
+	comment := models.Comment{
+		Body:   body.Body,
+		UserID: currentUser.ID,
+		PostID: post.ID,
+	}
+
+	result := initializers.DB.Create(&comment)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create comment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"comment": comment})
+}
+
+func GetComments(c *gin.Context) {
+	postID := c.Param("id")
+
+	var comments []models.Comment
+	// get comments AND user who wrote them
+	initializers.DB.Where("post_id = ?", postID).Preload("User").Find(&comments)
+
+	c.JSON(http.StatusOK, gin.H{"comments": comments})
+}
+
+func UpdateComment(c *gin.Context) {
+	id := c.Param("id")
+	var body struct { Body string }
+	c.Bind(&body)
+
+	var comment models.Comment
+	if err := initializers.DB.First(&comment, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Comment not found"})
+		return
+	}
+
+	user, _ := c.Get("user")
+	if comment.UserID != user.(models.User).ID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not your comment"})
+		return
+	}
+
+	initializers.DB.Model(&comment).Updates(models.Comment{Body: body.Body})
+	c.JSON(http.StatusOK, gin.H{"comment": comment})
+}
+
+func DeleteComment(c *gin.Context) {
+	id := c.Param("id")
+	var comment models.Comment
+	if err := initializers.DB.First(&comment, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Comment not found"})
+		return
+	}
+
+	user, _ := c.Get("user")
+	if comment.UserID != user.(models.User).ID {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not your comment"})
+		return
+	}
+
+	initializers.DB.Delete(&comment)
+	c.JSON(http.StatusOK, gin.H{"message": "Deleted"})
+}-e 
+---
+
+FILE: ./backend/main.go
+package main
+
+import (
+	"github.com/arjodas/cvwo-gossip-with-go/backend/controllers"
+	"github.com/arjodas/cvwo-gossip-with-go/backend/initializers"
+	"github.com/arjodas/cvwo-gossip-with-go/backend/middleware"
+	"github.com/arjodas/cvwo-gossip-with-go/backend/models"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+)
+
+// init() always runs before main() 
+func init() {
+	initializers.LoadEnvVariables()
+	initializers.ConnectToDB()
+}
+
+func main() {
+	r := gin.Default()    // the web server
+	r.Use(cors.Default()) // enables x origin communication
+
+	// checks and synchronizes Go structs to loaded DB. structs are the source of truth
+	initializers.DB.AutoMigrate(
+		&models.User{},
+		&models.Post{},
+		&models.Comment{},
+		&models.Topic{},
+		&models.Vote{},
+	)
+
+	// --- SEEDING ---
+	// create default topics if they don't exist
+	topics := []models.Topic{
+		{Title: "General", Slug: "general", Description: "General Discussion"},
+		{Title: "Technology", Slug: "tech", Description: "Tech News & Programming"},
+		{Title: "Career", Slug: "career", Description: "Career Advice"},
+		{Title: "Personal Finance", Slug: "personal_finance", Description: "Personal Finance"},
+		{Title: "Random", Slug: "random", Description: "Off-topic chatter"},
+	}
+
+	for _, t := range topics {
+		if initializers.DB.First(&models.Topic{}, "slug = ?", t.Slug).RowsAffected == 0 {
+			initializers.DB.Create(&t)
+		}
+	}
+
+	// ===========================
+	//    USER & AUTH ROUTES
+	// ===========================
+	r.POST("/signup", controllers.Signup)
+	r.POST("/login", controllers.Login)
+	r.GET("/validate", middleware.RequireAuth, controllers.Validate) // check if cookie/token is valid
+
+	// ===========================
+	//       TOPIC ROUTES
+	// ===========================
+	// Public
+	r.GET("/topics", controllers.GetTopics)      // view all topics
+	r.GET("/topics/:id", controllers.GetTopic)   // view single topic details
+
+	// Protected (Users can contribute to the Wiki)
+	r.POST("/topics", middleware.RequireAuth, controllers.CreateTopic)
+	r.PUT("/topics/:id", middleware.RequireAuth, controllers.UpdateTopic)
+	r.DELETE("/topics/:id", middleware.RequireAuth, controllers.DeleteTopic)
+
+	// ===========================
+	//       POST ROUTES
+	// ===========================
+	// Public
+	r.GET("/posts", controllers.GetPosts)    // view feed
+	r.GET("/posts/:id", controllers.GetPost) // view single post
+
+	// Protected
+	r.POST("/posts", middleware.RequireAuth, controllers.CreatePost)       // only users can post
+	r.PUT("/posts/:id", middleware.RequireAuth, controllers.UpdatePost)    // update own post
+	r.DELETE("/posts/:id", middleware.RequireAuth, controllers.DeletePost) // delete own post
+
+	// ===========================
+	//      COMMENT ROUTES
+	// ===========================
+	// Public
+	r.GET("/posts/:id/comments", controllers.GetComments) // read discussion
+
+	// Protected
+	r.POST("/posts/:id/comments", middleware.RequireAuth, controllers.CreateComment) // add to discussion
+	r.PUT("/comments/:id", middleware.RequireAuth, controllers.UpdateComment)        // fix typo in comment
+	r.DELETE("/comments/:id", middleware.RequireAuth, controllers.DeleteComment)     // delete regretful comment
+
+	r.Run() // start server listening on port 8080
+}-e 
+---
+
+FILE: ./backend/initializers/envVars.go
+package initializers
+
+import (
+    "log"
+    "github.com/joho/godotenv"
+)
+
+func LoadEnvVariables() {
+    err := godotenv.Load()
+    if err != nil {
+        log.Fatal("Error loading .env file")
+    }
+}-e 
+---
+
+FILE: ./backend/initializers/database.go
+package initializers
+
+import (
+    "log"   // for printing errs to console
+    "os"    // read env variables
+    "gorm.io/driver/postgres"   // imports postgres driver for gorm
+    "gorm.io/gorm"  // the ORM
+)
+
+var DB *gorm.DB // global singleton database pointer
+
+func ConnectToDB() {
+    var err error
+    dsn := os.Getenv("DB_URL")
+    DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+    if err != nil {
+        log.Fatal("Failed to connect to database")
+        // immediately kill program 
+    }
+    DB.Exec("CREATE EXTENSION IF NOT EXISTS vector")
+    // manually enable pgvector extension
+}-e 
+---
+

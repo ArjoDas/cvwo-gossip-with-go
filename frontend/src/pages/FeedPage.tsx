@@ -82,21 +82,29 @@ export default function FeedPage() {
                     {/* SEARCH BAR */}
                     <Box component="form" onSubmit={handleSearch} sx={{ mr: 2, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 1 }}>
                         <TextField
-                            variant="standard"
-                            placeholder="Search..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            InputProps={{
-                                disableUnderline: true,
-                                sx: { color: 'white', px: 2, py: 0.5 },
-                                endAdornment: (
-                                    <InputAdornment position="end">
-                                        <IconButton type="submit" sx={{ color: 'white' }}>
-                                            <SearchIcon />
-                                        </IconButton>
-                                    </InputAdornment>
-                                )
-                            }}
+                        variant="standard"
+                        placeholder="Search..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        
+                        // listen for the "Enter" key
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                            handleSearch(e);
+                            }
+                        }}
+
+                        InputProps={{
+                            disableUnderline: true,
+                            sx: { color: 'white', px: 2, py: 0.5 },
+                            endAdornment: (
+                            <InputAdornment position="end">
+                                <IconButton onClick={handleSearch}>
+                                <SearchIcon sx={{ color: 'white' }} />
+                                </IconButton>
+                            </InputAdornment>
+                            )
+                        }}
                         />
                     </Box>
 

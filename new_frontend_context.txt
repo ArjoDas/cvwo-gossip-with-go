@@ -1,0 +1,823 @@
+FILE: ./frontend/vite.config.ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',  // The Go Backend
+        changeOrigin: true,               // changes Host header of vite's http request to target
+        rewrite: (path) => path.replace(/^\/api/, ''),  // Removes '/api' before sending to Go    
+      },
+    },
+  },
+})
+-e 
+---
+
+FILE: ./frontend/src/App.tsx
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { CssBaseline, Container } from '@mui/material';
+
+import LoginPage from './pages/LoginPage';
+import FeedPage from './pages/FeedPage';
+import SignupPage from './pages/SignupPage';
+import PostDetailPage from './pages/PostDetailPage';
+
+function App() {
+  return (
+    <BrowserRouter>
+      {/* CssBaseline kicks out browser default styles */}
+      <CssBaseline />
+      <Container maxWidth="md" sx={{ marginTop: 4 }}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/" element={<FeedPage />} />
+          <Route path="/posts/:id" element={<PostDetailPage />} />
+
+          {/* Redirect unknown routes to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Container>
+    </BrowserRouter>
+  );
+}
+
+export default App;-e 
+---
+
+FILE: ./frontend/src/main.tsx
+import { StrictMode } from 'react'            // for code-checking during development 
+import { createRoot } from 'react-dom/client' // initialises concurrent rendering engine
+import './index.css'
+import App from './App.tsx'
+
+// injects react code into the root html element
+// ! tells compiler that getElementById won't return null
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+-e 
+---
+
+FILE: ./frontend/src/index.css
+-e 
+---
+
+FILE: ./frontend/src/components/CreatePostModal.tsx
+import { useState, useEffect } from 'react';
+import { Button, TextField, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem } from '@mui/material'; // Added MenuItem
+import axios from 'axios';
+
+interface CreatePostModalProps {
+    open: boolean;
+    onClose: () => void;
+    onPostCreated: () => void;
+}
+
+interface Topic {
+    ID: number;
+    Title: string;
+}
+
+export default function CreatePostModal({ open, onClose, onPostCreated }: CreatePostModalProps) {
+    const [title, setTitle] = useState('');
+    const [body, setBody] = useState('');
+    const [topicId, setTopicId] = useState(''); // State for selected topic
+    const [topics, setTopics] = useState<Topic[]>([]); // State for list of topics
+    const [loading, setLoading] = useState(false);
+
+    // Fetch topics when modal opens
+    useEffect(() => {
+        if (open) {
+            axios.get('/api/topics')
+                .then(res => setTopics(res.data.topics))
+                .catch(err => console.error("Failed to load topics", err));
+        }
+    }, [open]);
+
+    const handleSubmit = async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post('/api/posts', 
+                { 
+                    title, 
+                    body, 
+                    TopicID: Number(topicId) // Send the chosen TopicID
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            
+            setTitle('');
+            setBody('');
+            setTopicId('');
+            onPostCreated();
+            onClose();
+        } catch (err) {
+            console.error("Failed to create post", err);
+            alert("Failed to create post.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+            <DialogTitle>Create New Post</DialogTitle>
+            <DialogContent>
+                <TextField
+                    margin="dense"
+                    label="Title"
+                    fullWidth
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                />
+                
+                {/* Topic Selector */}
+                <TextField
+                    select
+                    margin="dense"
+                    label="Topic"
+                    fullWidth
+                    value={topicId}
+                    onChange={(e) => setTopicId(e.target.value)}
+                >
+                    {topics.map((topic) => (
+                        <MenuItem key={topic.ID} value={topic.ID}>
+                            {topic.Title}
+                        </MenuItem>
+                    ))}
+                </TextField>
+
+                <TextField
+                    margin="dense"
+                    label="Body"
+                    fullWidth
+                    multiline
+                    rows={4}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                />
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Cancel</Button>
+                <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+                    {loading ? 'Posting...' : 'Post'}
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}-e 
+---
+
+FILE: ./frontend/src/components/TopicManagerModal.tsx
+import { useEffect, useState } from 'react';
+import { 
+    Button, TextField, Dialog, DialogActions, DialogContent, DialogTitle, 
+    List, ListItem, ListItemText, IconButton, Box 
+} from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import axios from 'axios';
+
+interface Topic {
+    ID: number;
+    Title: string;
+    Description: string;
+}
+
+interface Props {
+    open: boolean;
+    onClose: () => void;
+}
+
+export default function TopicManagerModal({ open, onClose }: Props) {
+    const [topics, setTopics] = useState<Topic[]>([]);
+    const [newTopic, setNewTopic] = useState('');
+
+    useEffect(() => {
+        if (open) fetchTopics();
+    }, [open]);
+
+    const fetchTopics = async () => {
+        const res = await axios.get('/api/topics');
+        setTopics(res.data.topics);
+    };
+
+    const handleCreate = async () => {
+        if (!newTopic) return;
+        const slug = newTopic.toLowerCase().replace(/ /g, '-');
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post('/api/topics', 
+                { title: newTopic, slug, description: "User Created" },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setNewTopic('');
+            fetchTopics();
+        } catch (e) { alert("Failed to create"); }
+    };
+
+    const handleDelete = async (id: number) => {
+        if (!confirm("Delete topic?")) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/topics/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            fetchTopics();
+        } catch (e) { alert("Failed to delete (Topic might have posts attached)"); }
+    };
+
+    const handleEdit = async (topic: Topic) => {
+        const newTitle = prompt("Edit Topic Title:", topic.Title);
+        if (!newTitle) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/topics/${topic.ID}`, 
+                { title: newTitle, description: topic.Description },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            fetchTopics();
+        } catch (e) { alert("Failed to edit"); }
+    };
+
+    return (
+        <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+            <DialogTitle>Manage Topics</DialogTitle>
+            <DialogContent>
+                {/* Create New */}
+                <Box display="flex" gap={1} mb={2} mt={1}>
+                    <TextField 
+                        fullWidth size="small" label="New Topic Name" 
+                        value={newTopic} onChange={(e) => setNewTopic(e.target.value)}
+                    />
+                    <Button variant="contained" onClick={handleCreate}>Add</Button>
+                </Box>
+
+                {/* List Existing */}
+                <List dense>
+                    {topics.map((t) => (
+                        <ListItem key={t.ID}
+                            secondaryAction={
+                                <>
+                                    <IconButton edge="end" onClick={() => handleEdit(t)}><EditIcon /></IconButton>
+                                    <IconButton edge="end" onClick={() => handleDelete(t.ID)} color="error"><DeleteIcon /></IconButton>
+                                </>
+                            }
+                        >
+                            <ListItemText primary={t.Title} secondary={t.Description} />
+                        </ListItem>
+                    ))}
+                </List>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Close</Button>
+            </DialogActions>
+        </Dialog>
+    );
+}-e 
+---
+
+FILE: ./frontend/src/pages/LoginPage.tsx
+import { useState } from 'react';
+import { Box, Button, TextField, Typography, Paper, Alert, Link as MuiLink } from '@mui/material';
+import axios from 'axios';
+import { useNavigate, Link } from 'react-router-dom'; // used to programmatically change the URL (jump to homepage after login)
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault(); 
+    setError('');       
+
+    try {
+      // capture response
+      const res = await axios.post('/api/login', { email, password });
+      // save the token
+      localStorage.setItem('token', res.data.token);
+      navigate('/'); 
+    } catch (err: any) {
+      console.error("Login Failed:", err);
+      if (err.response && err.response.data && err.response.data.error) {
+        setError(err.response.data.error);
+      } else {
+        setError('Login failed (Check console for details)');
+      }
+    }
+  };
+  
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+      <Paper elevation={3} sx={{ p: 4, width: '100%', maxWidth: 400 }}>
+        <Typography variant="h5" component="h1" gutterBottom textAlign="center">
+          Login
+        </Typography>
+
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        <Box component="form" onSubmit={handleLogin}>
+          <TextField
+            label="Email"
+            fullWidth
+            margin="normal"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <TextField
+            label="Password"
+            type="password"
+            fullWidth
+            margin="normal"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <Button type="submit" variant="contained" fullWidth sx={{ mt: 2, mb: 2 }}>
+            Login
+          </Button>
+
+          <Box textAlign="center">
+            <Typography variant="body2">
+              Don't have an account?{' '}
+              <MuiLink component={Link} to="/signup">
+                Sign up
+              </MuiLink>
+            </Typography>
+          </Box>
+        </Box>
+      </Paper>
+    </Box>
+  );
+}-e 
+---
+
+FILE: ./frontend/src/pages/PostDetailPage.tsx
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { 
+    Container, Typography, Card, CardContent, Box, CircularProgress, 
+    TextField, Button, Divider, Paper, IconButton 
+} from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import axios from 'axios';
+
+interface Comment {
+    ID: number;
+    Body: string;
+    User: { Username: string };
+    UserID: number; // needed to check ownership
+}
+
+interface Post {
+    ID: number;
+    Title: string;
+    Body: string;
+    User: { Username: string };
+    UserID: number; // needed to check ownership
+    Comments: Comment[];
+}
+
+export default function PostDetailPage() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [post, setPost] = useState<Post | null>(null);
+    const [comments, setComments] = useState<Comment[]>([]);
+    const [newComment, setNewComment] = useState('');
+    const [loading, setLoading] = useState(true);
+    
+    // we get the current user ID from the token (a bit hacky, but fast)
+    // in a real app, we'd store the user object in Context
+    const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+
+    useEffect(() => {
+        fetchData();
+        parseUserFromToken();
+    }, [id]);
+
+    const parseUserFromToken = () => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        try {
+            // JWT is "header.payload.signature"
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            const payload = JSON.parse(jsonPayload);
+            setCurrentUserId(payload.sub); // 'sub' is usually the ID in standard JWTs
+        } catch (e) {
+            console.error("Failed to parse token");
+        }
+    };
+
+    const fetchData = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // request both in parallel
+        const [postRes, commentsRes] = await Promise.all([
+        axios.get(`/api/posts/${id}`, { headers }),
+        axios.get(`/api/posts/${id}/comments`, { headers })
+        ]);
+
+        setPost(postRes.data.post);
+        setComments(commentsRes.data.comments);
+        setLoading(false);
+    } catch (err) {
+        console.error("Failed to load data", err);
+        navigate('/');
+    }
+    };
+
+    // --- POST ACTIONS ---
+    const handleDeletePost = async () => {
+        if (!confirm("Are you sure you want to delete this post?")) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/posts/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            navigate('/');
+        } catch (err) { alert("Failed to delete post"); }
+    };
+
+    const handleEditPost = async () => {
+        if (!post) return;
+        const newTitle = prompt("Edit Title:", post.Title);
+        const newBody = prompt("Edit Body:", post.Body);
+        
+        if (newTitle === null || newBody === null) return; // User cancelled
+
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/posts/${id}`, 
+                { title: newTitle, body: newBody },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            fetchData(); // refresh UI
+        } catch (err) { alert("Failed to edit post"); }
+    };
+
+    // --- COMMENT ACTIONS ---
+    const handleSubmitComment = async () => {
+        if (!newComment.trim()) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`/api/posts/${id}/comments`, 
+                { body: newComment },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            setNewComment('');
+            fetchData(); 
+        } catch (err) { alert("Failed to post comment"); }
+    };
+
+    const handleDeleteComment = async (commentId: number) => {
+        if (!confirm("Delete comment?")) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`/api/comments/${commentId}`, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData();
+        } catch (err) { alert("Failed to delete comment"); }
+    };
+
+    const handleEditComment = async (comment: Comment) => {
+        const newBody = prompt("Edit Comment:", comment.Body);
+        if (newBody === null) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`/api/comments/${comment.ID}`, 
+                { body: newBody },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            fetchData();
+        } catch (err) { alert("Failed to edit comment"); }
+    };
+
+    if (loading || !post) return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
+
+    const isOwner = currentUserId === post.UserID;
+
+    return (
+        <Container maxWidth="md">
+            <Button onClick={() => navigate('/')} sx={{ mb: 2 }}>&larr; Back to Feed</Button>
+
+            {/* MAIN POST CARD */}
+            <Card sx={{ mb: 4, bgcolor: '#fafafa' }}>
+                <CardContent>
+                    <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+                        <Box>
+                            <Typography variant="h4" gutterBottom>{post.Title}</Typography>
+                            <Typography color="text.secondary" variant="subtitle2" gutterBottom>
+                                Posted by @{post.User?.Username || 'Unknown'}
+                            </Typography>
+                        </Box>
+                        {/* Only show actions if user owns the post */}
+                        {isOwner && (
+                            <Box>
+                                <IconButton onClick={handleEditPost} color="primary"><EditIcon /></IconButton>
+                                <IconButton onClick={handleDeletePost} color="error"><DeleteIcon /></IconButton>
+                            </Box>
+                        )}
+                    </Box>
+                    <Typography variant="body1" sx={{ mt: 2 }}>{post.Body}</Typography>
+                </CardContent>
+            </Card>
+
+            <Divider sx={{ mb: 4 }} />
+
+            {/* COMMENTS SECTION */}
+            <Typography variant="h5" gutterBottom>Discussion</Typography>
+
+            <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+                <TextField 
+                    fullWidth label="Write a comment..." variant="outlined"
+                    value={newComment} onChange={(e) => setNewComment(e.target.value)}
+                />
+                <Button variant="contained" onClick={handleSubmitComment}>Post</Button>
+            </Box>
+
+            {comments.length === 0 ? (
+                <Typography color="text.secondary">No comments yet.</Typography>
+            ) : (
+                comments.map((comment) => (
+                    <Paper key={comment.ID} sx={{ p: 2, mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} elevation={1}>
+                        <Box>
+                            <Typography variant="subtitle2" color="primary">@{comment.User?.Username}</Typography>
+                            <Typography variant="body2">{comment.Body}</Typography>
+                        </Box>
+                        {/* Only show actions if user owns the comment */}
+                        {currentUserId === comment.UserID && (
+                            <Box>
+                                <IconButton size="small" onClick={() => handleEditComment(comment)}><EditIcon fontSize="small" /></IconButton>
+                                <IconButton size="small" onClick={() => handleDeleteComment(comment.ID)} color="error"><DeleteIcon fontSize="small" /></IconButton>
+                            </Box>
+                        )}
+                    </Paper>
+                ))
+            )}
+        </Container>
+    );
+}-e 
+---
+
+FILE: ./frontend/src/pages/SignupPage.tsx
+import { useState } from 'react';
+import { Box, Button, TextField, Typography, Paper, Alert, Link as MuiLink } from '@mui/material';
+import axios from 'axios';
+import { useNavigate, Link } from 'react-router-dom';
+
+export default function SignupPage() {
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    try {
+      await axios.post('/api/signup', { username, email, password });
+      navigate('/login'); // redirect to login after signup
+    } catch (err) {
+      setError('Failed to create account. Username or Email may be taken.');
+    }
+  };
+
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
+      <Paper elevation={3} sx={{ p: 4, width: '100%', maxWidth: 400 }}>
+        <Typography variant="h5" component="h1" gutterBottom textAlign="center">
+          Sign Up
+        </Typography>
+
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        <Box component="form" onSubmit={handleSignup}>
+          <TextField
+            label="Username"
+            fullWidth
+            margin="normal"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <TextField
+            label="Email"
+            fullWidth
+            margin="normal"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <TextField
+            label="Password"
+            type="password"
+            fullWidth
+            margin="normal"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <Button type="submit" variant="contained" fullWidth sx={{ mt: 2, mb: 2 }}>
+            Sign Up
+          </Button>
+
+          <Box textAlign="center">
+            <Typography variant="body2">
+              Already have an account?{' '}
+              <MuiLink component={Link} to="/login">
+                Login
+              </MuiLink>
+            </Typography>
+          </Box>
+        </Box>
+      </Paper>
+    </Box>
+  );
+}-e 
+---
+
+FILE: ./frontend/src/pages/FeedPage.tsx
+import { useEffect, useState } from 'react';
+import { 
+    Container, Typography, Card, CardContent, CardActions, Button, Fab, Box, CircularProgress, 
+    AppBar, Toolbar, IconButton, TextField, InputAdornment 
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import LogoutIcon from '@mui/icons-material/Logout';
+import SearchIcon from '@mui/icons-material/Search';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; // Icon for Topics
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import CreatePostModal from '../components/CreatePostModal';
+import TopicManagerModal from '../components/TopicManagerModal';
+
+interface Post {
+    ID: number;
+    Title: string;
+    Body: string;
+    Topic: { Title: string };
+    User: { Username: string };
+}
+
+export default function FeedPage() {
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const navigate = useNavigate();
+
+    // fetch posts on load
+    useEffect(() => {
+        fetchPosts();
+    }, []);
+
+    const fetchPosts = async (query = '') => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                navigate('/login');
+                return;
+            }
+
+            // if query exists, append ?search=... (Using the new search feature)
+            const url = query ? `/api/posts?search=${query}` : '/api/posts';
+
+            const res = await axios.get(url, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setPosts(res.data.posts);
+            setLoading(false);
+        } catch (err) {
+            console.error("Failed to fetch posts", err);
+            navigate('/login');
+        }
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('token'); // destroy token
+        navigate('/login'); // redirect
+    };
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        fetchPosts(searchQuery);
+    };
+
+    if (loading) {
+        return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
+    }
+
+    return (
+        <>
+            {/* NAVIGATION BAR */}
+            <AppBar position="static" sx={{ mb: 4 }}>
+                <Toolbar>
+                    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                        Gossip (CVWO)
+                    </Typography>
+                    
+                    {/* SEARCH BAR */}
+                    <Box component="form" onSubmit={handleSearch} sx={{ mr: 2, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 1 }}>
+                        <TextField
+                            variant="standard"
+                            placeholder="Search..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            InputProps={{
+                                disableUnderline: true,
+                                sx: { color: 'white', px: 2, py: 0.5 },
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton type="submit" sx={{ color: 'white' }}>
+                                            <SearchIcon />
+                                        </IconButton>
+                                    </InputAdornment>
+                                )
+                            }}
+                        />
+                    </Box>
+
+                    {/* ACTION BUTTONS */}
+                    <Button color="inherit" startIcon={<LibraryBooksIcon />} onClick={() => setIsTopicModalOpen(true)}>
+                        Topics
+                    </Button>
+                    <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>
+                        Logout
+                    </Button>
+                </Toolbar>
+            </AppBar>
+
+            <Container maxWidth="md">
+                {posts.length === 0 ? (
+                    <Typography variant="body1" color="text.secondary" align="center" sx={{ mt: 4 }}>
+                        {searchQuery ? 'No results found matching your vibes.' : 'No posts yet. Be the first to say something!'}
+                    </Typography>
+                ) : (
+                    posts.map((post) => (
+                        <Card key={post.ID} sx={{ mb: 2, bgcolor: '#fafafa' }}>
+                            <CardContent>
+                                <Typography variant="overline" color="primary" sx={{ fontWeight: 'bold' }}>
+                                    {post.Topic?.Title || 'General'}
+                                </Typography>
+                                <Typography variant="h6" component="div">
+                                    {post.Title}
+                                </Typography>
+                                <Typography sx={{ mb: 1.5 }} color="text.secondary" variant="subtitle2">
+                                    Posted by @{post.User?.Username || 'Unknown'}
+                                </Typography>
+                                <Typography variant="body2">
+                                    {post.Body}
+                                </Typography>
+                            </CardContent>
+                            <CardActions>
+                                <Button size="small" onClick={() => navigate(`/posts/${post.ID}`)}>
+                                    View Discussion
+                                </Button>
+                            </CardActions>
+                        </Card>
+                    ))
+                )}
+
+                {/* ADD POST FLOATING BUTTON */}
+                <Fab 
+                    color="primary" 
+                    aria-label="add" 
+                    sx={{ position: 'fixed', bottom: 32, right: 32 }}
+                    onClick={() => setIsModalOpen(true)}
+                >
+                    <AddIcon />
+                </Fab>
+
+                {/* MODALS */}
+                <CreatePostModal 
+                    open={isModalOpen} 
+                    onClose={() => setIsModalOpen(false)}
+                    onPostCreated={() => fetchPosts('')} // reset search on new post
+                />
+                
+                <TopicManagerModal 
+                    open={isTopicModalOpen} 
+                    onClose={() => setIsTopicModalOpen(false)} 
+                />
+            </Container>
+        </>
+    );
+}-e 
+---
+
