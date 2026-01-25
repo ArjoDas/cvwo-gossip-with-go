@@ -3,17 +3,19 @@ package models
 import "gorm.io/gorm"
 
 type User struct {
-	gorm.Model
+	gorm.Model 	// predefined struct, allows auto inheritance of ID, CreatedAt, UpdatedAt, DeletedAt
+	// note GORM enables soft delete, if user is deleted, they become invisible to normal queries but remain in the DB
 	Username     string `gorm:"uniqueIndex"`
 	Email        string `gorm:"uniqueIndex"`
 	PasswordHash string
-	Role         string `gorm:"default:'user'"` // Enforced in logic as 'user' or 'sys_admin'
+	Role         string `gorm:"default:'user'"` // enforced in logic as 'user' or 'sys_admin'
 	
-	// Relationships
+	// relationships
 	Posts    []Post
 	Comments []Comment
 	Votes    []Vote
     
-    // Reverse relation for the Many-to-Many topic moderation
-    ModeratedTopics []Topic `gorm:"many2many:topic_moderators;"`
+	// reverse relation for the Many-to-Many topic moderation
+	// create a join table, necessary for many2many
+	ModeratedTopics []Topic `gorm:"many2many:topic_moderators;"`
 }

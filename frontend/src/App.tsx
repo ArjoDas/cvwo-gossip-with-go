@@ -1,30 +1,29 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { CssBaseline, Container } from '@mui/material';
+
+import LoginPage from './pages/LoginPage';
+import FeedPage from './pages/FeedPage';
+import SignupPage from './pages/SignupPage';
+import PostDetailPage from './pages/PostDetailPage';
 
 function App() {
-  const [message, setMessage] = useState('Loading...')
-
-  useEffect(() => {
-    axios.get('/api/ping')
-      .then(res => {
-        console.log("Response:", res.data)
-        setMessage(res.data.message)
-      })
-      .catch(err => {
-        console.error("Error connecting:", err)
-        setMessage("Error connecting to backend")
-      })
-  }, [])
-
   return (
-    <>
-      <h1>Gossip with Go</h1>
-      <div>
-        <p>Backend Status: <strong>{message}</strong></p>
-      </div>
-    </>
-  )
+    <BrowserRouter>
+      {/* CssBaseline kicks out browser default styles */}
+      <CssBaseline />
+      <Container maxWidth="md" sx={{ marginTop: 4 }}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/" element={<FeedPage />} />
+          <Route path="/posts/:id" element={<PostDetailPage />} />
+
+          {/* Redirect unknown routes to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Container>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;

@@ -7,9 +7,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8080', // The Go Backend
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''), // Removes '/api' before sending to Go    
+        target: 'http://localhost:8080',  // The Go Backend
+        changeOrigin: true,               // changes Host header of vite's http request to target
+        rewrite: (path) => path.replace(/^\/api/, ''),  // Removes '/api' before sending to Go    
       },
     },
   },

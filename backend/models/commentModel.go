@@ -6,15 +6,15 @@ type Comment struct {
 	gorm.Model
 	Body string
 	
-    // Relationships
+  // relationships
 	UserID uint
-	User   User
+	User   User		// virtual field
 	
-    // Optimization: PostID exists on every comment
-    PostID uint 
-	Post   Post
+  // optimisation: PostID exists on every comment, know post without traversing adj list
+  PostID uint 
+	Post   Post		// virtual field
     
-    // Adjacency List: Recursive relationship
-	ParentID *uint // Pointer allows null (Top level comments have no parent)
+  // adjacency list: recursive relationship
+	ParentID *uint // pointer allows null (top level comments have no parent)
 	Children []Comment `gorm:"foreignKey:ParentID"`
 }

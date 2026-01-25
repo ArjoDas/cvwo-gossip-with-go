@@ -1,14 +1,13 @@
 package initializers
 
 import (
-    "log"
-    "os"
-
-    "gorm.io/driver/postgres"
-    "gorm.io/gorm"
+    "log"   // for printing errs to console
+    "os"    // read env variables
+    "gorm.io/driver/postgres"   // imports postgres driver for gorm
+    "gorm.io/gorm"  // the ORM
 )
 
-var DB *gorm.DB
+var DB *gorm.DB // global singleton database pointer
 
 func ConnectToDB() {
     var err error
@@ -16,7 +15,8 @@ func ConnectToDB() {
     DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
     if err != nil {
         log.Fatal("Failed to connect to database")
+        // immediately kill program 
     }
-
-		DB.Exec("CREATE EXTENSION IF NOT EXISTS vector")
+    DB.Exec("CREATE EXTENSION IF NOT EXISTS vector")
+    // manually enable pgvector extension
 }
