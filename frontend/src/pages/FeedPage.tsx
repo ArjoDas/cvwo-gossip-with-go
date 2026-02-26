@@ -78,9 +78,10 @@ export default function FeedPage() {
     };
 
     const handleSelectTopic = (topicId: string | null) => {
-        setSelectedTopicId(topicId);
+        const idToSet = topicId === "null" ? null : topicId;
+        setSelectedTopicId(idToSet);
         setLoading(true);
-        fetchPosts(searchQuery, topicId);
+        fetchPosts(searchQuery, idToSet);
     };
 
     return (
