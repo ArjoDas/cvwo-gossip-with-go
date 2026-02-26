@@ -1,16 +1,9 @@
-import { useEffect, useState } from 'react';
-import { 
-    Container, Typography, Card, CardContent, CardActions, Button, Fab, Box, CircularProgress, 
-    AppBar, Toolbar, IconButton, TextField, InputAdornment 
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import LogoutIcon from '@mui/icons-material/Logout';
-import SearchIcon from '@mui/icons-material/Search';
-import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; // Icon for Topics
+import { useEffect, useState, type FormEvent } from 'react';
 import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import CreatePostModal from '../components/CreatePostModal';
 import TopicManagerModal from '../components/TopicManagerModal';
+import Navbar from '../components/Navbar';
 
 interface Post {
     ID: number;
@@ -52,117 +45,91 @@ export default function FeedPage() {
         navigate('/login'); // redirect
     };
 
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSearch = (e?: FormEvent) => {
+        if (e) {
+            e.preventDefault();
+        }
         setLoading(true);
         fetchPosts(searchQuery);
     };
 
-    if (loading) {
-        return <Box display="flex" justifyContent="center" mt={4}><CircularProgress /></Box>;
-    }
-
     return (
-        <>
-            {/* NAVIGATION BAR */}
-            <AppBar position="static" sx={{ mb: 4 }}>
-                <Toolbar>
-                    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                        Gossip (CVWO)
-                    </Typography>
-                    
-                    {/* SEARCH BAR */}
-                    <Box component="form" onSubmit={handleSearch} sx={{ mr: 2, bgcolor: 'rgba(255,255,255,0.15)', borderRadius: 1 }}>
-                        <TextField
-                        variant="standard"
-                        placeholder="Search..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        
-                        // listen for the "Enter" key
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                            handleSearch(e);
-                            }
-                        }}
+        <div className="min-h-screen">
+            <Navbar
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                onSearchSubmit={() => handleSearch()}
+                onLogout={handleLogout}
+                onOpenTopics={() => setIsTopicModalOpen(true)}
+            />
 
-                        InputProps={{
-                            disableUnderline: true,
-                            sx: { color: 'white', px: 2, py: 0.5 },
-                            endAdornment: (
-                            <InputAdornment position="end">
-                                <IconButton onClick={handleSearch}>
-                                <SearchIcon sx={{ color: 'white' }} />
-                                </IconButton>
-                            </InputAdornment>
-                            )
-                        }}
-                        />
-                    </Box>
-
-                    {/* ACTION BUTTONS */}
-                    <Button color="inherit" startIcon={<LibraryBooksIcon />} onClick={() => setIsTopicModalOpen(true)}>
-                        Topics
-                    </Button>
-                    <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>
-                        Logout
-                    </Button>
-                </Toolbar>
-            </AppBar>
-
-            <Container maxWidth="md">
-                {posts.length === 0 ? (
-                    <Typography variant="body1" color="text.secondary" align="center" sx={{ mt: 4 }}>
-                        {searchQuery ? 'No results found matching your vibes.' : 'No posts yet. Be the first to say something!'}
-                    </Typography>
+            <main className="max-w-4xl mx-auto px-4 py-6">
+                {loading ? (
+                    <div className="flex justify-center py-16">
+                        <div className="h-8 w-8 rounded-full border-2 border-stone-300 border-t-sky-500 animate-spin" />
+                    </div>
+                ) : posts.length === 0 ? (
+                    <p className="mt-8 text-center text-sm text-stone-500">
+                        {searchQuery
+                            ? 'No results found matching your vibes.'
+                            : 'No posts yet. Be the first to say something!'}
+                    </p>
                 ) : (
-                    posts.map((post) => (
-                        <Card key={post.ID} sx={{ mb: 2, bgcolor: '#fafafa' }}>
-                            <CardContent>
-                                <Typography variant="overline" color="primary" sx={{ fontWeight: 'bold' }}>
+                    <div className="space-y-4">
+                        {posts.map((post) => (
+                            <article
+                                key={post.ID}
+                                className="rounded-sm border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-sm hover:shadow-md transition-shadow p-4 sm:p-5"
+                            >
+                                <div className="text-xs font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-400">
                                     {post.Topic?.Title || 'General'}
-                                </Typography>
-                                <Typography variant="h6" component="div">
+                                </div>
+                                <h2 className="mt-1 text-base sm:text-lg font-semibold text-stone-900 dark:text-stone-50">
                                     {post.Title}
-                                </Typography>
-                                <Typography sx={{ mb: 1.5 }} color="text.secondary" variant="subtitle2">
+                                </h2>
+                                <p className="mt-1 text-xs text-stone-500">
                                     Posted by @{post.User?.Username || 'Unknown'}
-                                </Typography>
-                                <Typography variant="body2">
+                                </p>
+                                <p className="mt-3 text-sm leading-relaxed text-stone-700 dark:text-stone-300">
                                     {post.Body}
-                                </Typography>
-                            </CardContent>
-                            <CardActions>
-                                <Button size="small" onClick={() => navigate(`/posts/${post.ID}`)}>
-                                    View Discussion
-                                </Button>
-                            </CardActions>
-                        </Card>
-                    ))
+                                </p>
+                                <div className="mt-4 flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(`/posts/${post.ID}`)}
+                                        className="rounded-full px-4 py-1.5 text-xs font-medium text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/40 hover:bg-sky-100 dark:hover:bg-sky-900/60 transition"
+                                    >
+                                        View Discussion
+                                    </button>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
                 )}
+            </main>
 
-                {/* ADD POST FLOATING BUTTON */}
-                <Fab 
-                    color="primary" 
-                    aria-label="add" 
-                    sx={{ position: 'fixed', bottom: 32, right: 32 }}
-                    onClick={() => setIsModalOpen(true)}
-                >
-                    <AddIcon />
-                </Fab>
+            {/* Floating Add Post button */}
+            <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="fixed bottom-6 right-6 inline-flex items-center justify-center rounded-full bg-sky-500 hover:bg-sky-600 text-white shadow-lg shadow-sky-500/30 px-5 py-3 text-sm font-semibold transition"
+                aria-label="Create post"
+            >
+                <span className="mr-1 text-lg leading-none">+</span>
+                <span className="hidden sm:inline">New Post</span>
+            </button>
 
-                {/* MODALS */}
-                <CreatePostModal 
-                    open={isModalOpen} 
-                    onClose={() => setIsModalOpen(false)}
-                    onPostCreated={() => fetchPosts('')} // reset search on new post
-                />
-                
-                <TopicManagerModal 
-                    open={isTopicModalOpen} 
-                    onClose={() => setIsTopicModalOpen(false)} 
-                />
-            </Container>
-        </>
+            {/* MODALS */}
+            <CreatePostModal 
+                open={isModalOpen} 
+                onClose={() => setIsModalOpen(false)}
+                onPostCreated={() => fetchPosts('')} // reset search on new post
+            />
+            
+            <TopicManagerModal 
+                open={isTopicModalOpen} 
+                onClose={() => setIsTopicModalOpen(false)} 
+            />
+        </div>
     );
 }

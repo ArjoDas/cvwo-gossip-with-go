@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Box, Button, TextField, Typography, Paper, Alert, Link as MuiLink } from '@mui/material';
+import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom'; // used to programmatically change the URL (jump to homepage after login)
 import api from '../services/api';
 
@@ -9,7 +8,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-const handleLogin = async (e: React.FormEvent) => {
+const handleLogin = async (e: FormEvent) => {
     e.preventDefault(); 
     setError('');       
 
@@ -30,45 +29,69 @@ const handleLogin = async (e: React.FormEvent) => {
   };
   
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '80vh' }}>
-      <Paper elevation={3} sx={{ p: 4, width: '100%', maxWidth: 400 }}>
-        <Typography variant="h5" component="h1" gutterBottom textAlign="center">
-          Login
-        </Typography>
-
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-        <Box component="form" onSubmit={handleLogin}>
-          <TextField
-            label="Email"
-            fullWidth
-            margin="normal"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <TextField
-            label="Password"
-            type="password"
-            fullWidth
-            margin="normal"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          <Button type="submit" variant="contained" fullWidth sx={{ mt: 2, mb: 2 }}>
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-sm bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-xl px-6 py-6">
+        <div className="mb-4 text-center">
+          <h1 className="text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-50">
             Login
-          </Button>
+          </h1>
+          <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+            Welcome back to Gossip.
+          </p>
+        </div>
 
-          <Box textAlign="center">
-            <Typography variant="body2">
-              Don't have an account?{' '}
-              <MuiLink component={Link} to="/signup">
-                Sign up
-              </MuiLink>
-            </Typography>
-          </Box>
-        </Box>
-      </Paper>
-    </Box>
+        {error && (
+          <div className="mb-3 rounded-sm border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-sm border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-sky-400/70 focus:border-transparent"
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-stone-600 dark:text-stone-300 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-sm border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-sky-400/70 focus:border-transparent"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full mt-2 rounded-sm bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900 px-4 py-2 text-sm font-semibold shadow-sm hover:bg-stone-800 dark:hover:bg-stone-200 transition"
+          >
+            Login
+          </button>
+        </form>
+
+        <div className="mt-4 text-center">
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            Don't have an account?{' '}
+            <Link to="/signup" className="font-medium text-sky-600 dark:text-sky-400 hover:underline">
+              Sign up
+            </Link>
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
