@@ -77,7 +77,7 @@ const handleLogin = async (e: FormEvent) => {
 
           <button
             type="submit"
-            className="w-full mt-2 rounded-sm bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900 px-4 py-2 text-sm font-semibold shadow-sm hover:bg-stone-800 dark:hover:bg-stone-200 transition"
+            className="w-full mt-2 rounded-full bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900 px-4 py-2 text-sm font-semibold shadow-sm hover:bg-stone-800 dark:hover:bg-stone-200 transition"
           >
             Login
           </button>

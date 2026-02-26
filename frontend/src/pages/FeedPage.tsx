@@ -35,15 +35,15 @@ export default function FeedPage() {
 
     const fetchPosts = async (query = '', topicId: string | null = selectedTopicId) => {
         try {
-            const params: string[] = [];
+            const params = new URLSearchParams();
             if (query) {
-                params.push(`search=${encodeURIComponent(query)}`);
+                params.set('search', query);
             }
             if (topicId) {
-                params.push(`topic=${encodeURIComponent(topicId)}`);
+                params.set('topic', topicId);
             }
 
-            const queryString = params.length ? `?${params.join('&')}` : '';
+            const queryString = params.toString() ? `?${params.toString()}` : '';
             const url = `/posts${queryString}`;
 
             const res = await api.get(url);

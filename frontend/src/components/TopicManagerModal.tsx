@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 interface Topic {
@@ -13,8 +14,10 @@ interface Props {
 }
 
 export default function TopicManagerModal({ open, onClose }: Props) {
+    const navigate = useNavigate();
     const [topics, setTopics] = useState<Topic[]>([]);
     const [newTopic, setNewTopic] = useState('');
+    const [authError, setAuthError] = useState(false);
 
     useEffect(() => {
         if (open) fetchTopics();
@@ -26,6 +29,11 @@ export default function TopicManagerModal({ open, onClose }: Props) {
     };
 
     const handleCreate = async () => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setAuthError(true);
+            return;
+        }
         if (!newTopic) return;
         const slug = newTopic.toLowerCase().replace(/ /g, '-');
         try {
@@ -38,6 +46,11 @@ export default function TopicManagerModal({ open, onClose }: Props) {
     };
 
     const handleDelete = async (id: number) => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setAuthError(true);
+            return;
+        }
         if (!confirm("Delete topic?")) return;
         try {
             await api.delete(`/topics/${id}`);
@@ -46,6 +59,11 @@ export default function TopicManagerModal({ open, onClose }: Props) {
     };
 
     const handleEdit = async (topic: Topic) => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setAuthError(true);
+            return;
+        }
         const newTitle = prompt("Edit Topic Title:", topic.Title);
         if (!newTitle) return;
         try {
@@ -85,7 +103,7 @@ export default function TopicManagerModal({ open, onClose }: Props) {
                             value={newTopic}
                             onChange={(e) => setNewTopic(e.target.value)}
                             placeholder="New topic name"
-                            className="flex-1 rounded-sm border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-sky-400/70 focus:border-transparent"
+                            className="flex-1 rounded-sm border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400/50 focus:border-transparent"
                         />
                         <button
                             type="button"
@@ -95,6 +113,23 @@ export default function TopicManagerModal({ open, onClose }: Props) {
                             Add
                         </button>
                     </div>
+
+                    {authError && (
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800/50 px-3 py-2 text-[11px] font-medium text-stone-600 dark:text-stone-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                            <span>Login required to manage topics.</span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClose();
+                                    navigate('/login');
+                                }}
+                                className="underline underline-offset-4 hover:text-stone-800 dark:hover:text-stone-200"
+                            >
+                                Login
+                            </button>
+                        </div>
+                    )}
 
                     {/* List Existing */}
                     <div className="max-h-64 overflow-y-auto space-y-2 pt-1">

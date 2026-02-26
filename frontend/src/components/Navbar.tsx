@@ -1,4 +1,4 @@
-import { type FormEvent } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { useThemeMode } from '../context/ThemeContext';
 
 interface NavbarProps {
@@ -17,6 +17,12 @@ export default function Navbar({
   onOpenTopics,
 }: NavbarProps) {
   const { mode, toggleTheme } = useThemeMode();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('token') : null;
+    setIsAuthenticated(!!token);
+  }, []);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -30,9 +36,13 @@ export default function Navbar({
           {/* Branding */}
           <button
             type="button"
-            className="shrink-0 text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-50"
+            className="shrink-0 inline-flex items-center text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-50"
           >
-            Gossip
+            <img
+              src="/gossip.svg"
+              alt="Gossip"
+              className="h-7 w-7"
+            />
           </button>
 
           {/* Search */}
@@ -120,13 +130,27 @@ export default function Navbar({
               Topics
             </button>
 
-            <button
-              type="button"
-              onClick={onLogout}
-              className="inline-flex items-center rounded-full bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900 px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-stone-800 dark:hover:bg-stone-200 transition"
-            >
-              Logout
-            </button>
+            {isAuthenticated ? (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="inline-flex items-center rounded-full bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900 px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-stone-800 dark:hover:bg-stone-200 transition"
+              >
+                Logout
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.location.href = '/login';
+                  }
+                }}
+                className="inline-flex items-center rounded-full bg-sky-500 hover:bg-sky-600 text-white px-3 py-1.5 text-xs font-semibold shadow-sm transition"
+              >
+                Login
+              </button>
+            )}
           </div>
         </div>
 
