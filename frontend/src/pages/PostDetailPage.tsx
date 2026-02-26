@@ -29,6 +29,7 @@ export default function PostDetailPage() {
     // we get the current user ID from the token (a bit hacky, but fast)
     // in a real app, we'd store the user object in Context
     const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
 
     useEffect(() => {
         fetchData();
@@ -37,7 +38,10 @@ export default function PostDetailPage() {
 
     const parseUserFromToken = () => {
         const token = localStorage.getItem('token');
-        if (!token) return;
+        if (!token) {
+            setIsAuthenticated(false);
+            return;
+        }
         try {
             // JWT is "header.payload.signature"
             const base64Url = token.split('.')[1];
@@ -47,8 +51,10 @@ export default function PostDetailPage() {
             }).join(''));
             const payload = JSON.parse(jsonPayload);
             setCurrentUserId(payload.sub); // 'sub' is usually the ID in standard JWTs
+            setIsAuthenticated(true);
         } catch (e) {
             console.error("Failed to parse token");
+            setIsAuthenticated(false);
         }
     };
 
@@ -95,6 +101,12 @@ export default function PostDetailPage() {
 
     // --- COMMENT ACTIONS ---
     const handleSubmitComment = async () => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setIsAuthenticated(false);
+            return;
+        }
+
         if (!newComment.trim()) return;
         try {
             await api.post(`/posts/${id}/comments`, 
@@ -128,7 +140,7 @@ export default function PostDetailPage() {
     if (loading || !post) {
         return (
             <div className="min-h-screen flex items-center justify-center">
-                <div className="h-8 w-8 rounded-full border-2 border-stone-300 border-t-sky-500 animate-spin" />
+                <div className="h-8 w-8 rounded-full border-2 border-stone-300 border-t-stone-500 animate-spin" />
             </div>
         );
     }
@@ -141,7 +153,7 @@ export default function PostDetailPage() {
                 <button
                     type="button"
                     onClick={() => navigate('/')}
-                    className="mb-4 inline-flex items-center text-xs font-medium text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 transition"
+                    className="mb-4 inline-flex items-center text-xs font-medium text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-50 transition-colors"
                 >
                     <span className="mr-1">&larr;</span> Back to Feed
                 </button>
@@ -162,14 +174,14 @@ export default function PostDetailPage() {
                                 <button
                                     type="button"
                                     onClick={handleEditPost}
-                                    className="inline-flex items-center rounded-full border border-stone-200 dark:border-stone-700 px-3 py-1 text-xs font-medium text-stone-700 dark:text-stone-200 bg-white/70 dark:bg-stone-900/80 hover:bg-stone-100 dark:hover:bg-stone-800 transition"
+                                    className="inline-flex items-center rounded-sm border border-stone-200 dark:border-stone-700 px-3 py-1 text-xs font-medium text-stone-700 dark:text-stone-200 bg-white/70 dark:bg-stone-900/80 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
                                 >
                                     Edit
                                 </button>
                                 <button
                                     type="button"
                                     onClick={handleDeletePost}
-                                    className="inline-flex items-center rounded-full border border-rose-200/80 bg-rose-50/80 px-3 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70 transition"
+                                    className="inline-flex items-center rounded-sm px-3 py-1 text-xs font-medium text-rose-600/80 hover:text-rose-600 dark:text-rose-400/80 transition-colors"
                                 >
                                     Delete
                                 </button>
@@ -194,15 +206,29 @@ export default function PostDetailPage() {
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
                             placeholder="Write a comment..."
-                            className="flex-1 min-h-[60px] rounded-sm border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-sky-400/70 focus:border-transparent resize-y"
+                            className="flex-1 min-h-[60px] rounded-sm border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 px-3 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-400/50 focus:border-transparent resize-y"
                         />
                         <button
                             type="button"
                             onClick={handleSubmitComment}
-                            className="self-end sm:self-center rounded-full bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 text-xs font-semibold shadow-sm transition"
+                            disabled={!isAuthenticated || !newComment.trim()}
+                            className="self-end sm:self-center rounded-full bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 text-xs font-semibold shadow-sm transition disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             Post
                         </button>
+                        {!isAuthenticated && (
+                            <div className="sm:ml-0 sm:w-full mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800/50 px-3 py-2 text-[11px] font-medium text-stone-600 dark:text-stone-400">
+                                <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                                <span>You must be logged in to comment.</span>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/login')}
+                                    className="underline underline-offset-4 hover:text-stone-800 dark:hover:text-stone-200"
+                                >
+                                    Login
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {comments.length === 0 ? (
@@ -215,7 +241,7 @@ export default function PostDetailPage() {
                                     className="flex items-start justify-between gap-3 rounded-sm border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-3 py-2.5 shadow-sm"
                                 >
                                     <div>
-                                        <p className="text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                        <p className="text-xs font-semibold text-stone-700 dark:text-stone-300">
                                             @{comment.User?.Username}
                                         </p>
                                         <p className="mt-1 text-sm text-stone-700 dark:text-stone-200">
@@ -227,14 +253,14 @@ export default function PostDetailPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => handleEditComment(comment)}
-                                                className="text-[11px] font-medium text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 transition"
+                                                className="text-[11px] font-medium text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-50 transition-colors"
                                             >
                                                 Edit
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => handleDeleteComment(comment.ID)}
-                                                className="text-[11px] font-medium text-rose-500 hover:text-rose-600 transition"
+                                                className="text-[11px] font-medium text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-50 transition-colors"
                                             >
                                                 Delete
                                             </button>

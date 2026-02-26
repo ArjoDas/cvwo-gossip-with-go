@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 interface CreatePostModalProps {
@@ -13,15 +14,18 @@ interface Topic {
 }
 
 export default function CreatePostModal({ open, onClose, onPostCreated }: CreatePostModalProps) {
+    const navigate = useNavigate();
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
     const [topicId, setTopicId] = useState(''); // State for selected topic
     const [topics, setTopics] = useState<Topic[]>([]); // State for list of topics
     const [loading, setLoading] = useState(false);
+    const [authError, setAuthError] = useState(false);
 
     // Fetch topics when modal opens
     useEffect(() => {
         if (open) {
+            setAuthError(false);
             api.get('/topics')
                 .then(res => setTopics(res.data.topics))
                 .catch(err => console.error("Failed to load topics", err));
@@ -29,6 +33,12 @@ export default function CreatePostModal({ open, onClose, onPostCreated }: Create
     }, [open]);
 
     const handleSubmit = async () => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setAuthError(true);
+            return;
+        }
+
         setLoading(true);
         try {
             await api.post('/posts', 
@@ -119,6 +129,23 @@ export default function CreatePostModal({ open, onClose, onPostCreated }: Create
                             placeholder="Share the details..."
                         />
                     </div>
+
+                    {authError && (
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800/50 px-3 py-2 text-[11px] font-medium text-stone-600 dark:text-stone-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                            <span>You must be logged in to share a post.</span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClose();
+                                    navigate('/login');
+                                }}
+                                className="underline underline-offset-4 hover:text-sky-600"
+                            >
+                                Login
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="px-5 py-3 border-t border-stone-200 dark:border-stone-800 flex justify-end gap-2">
@@ -133,7 +160,7 @@ export default function CreatePostModal({ open, onClose, onPostCreated }: Create
                         type="button"
                         onClick={handleSubmit}
                         disabled={loading}
-                        className="rounded-sm px-4 py-1.5 text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm transition"
+                        className="rounded-full px-4 py-1.5 text-xs font-semibold text-white bg-sky-500 hover:bg-sky-600 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm transition"
                     >
                         {loading ? 'Posting...' : 'Post'}
                     </button>

@@ -13,23 +13,38 @@ interface Post {
     User: { Username: string };
 }
 
+interface Topic {
+    ID: number;
+    Title: string;
+}
+
 export default function FeedPage() {
     const [posts, setPosts] = useState<Post[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [topics, setTopics] = useState<Topic[]>([]);
+    const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
     const navigate = useNavigate();
 
-    // fetch posts on load
     useEffect(() => {
         fetchPosts();
+        fetchTopics();
     }, []);
 
-    const fetchPosts = async (query = '') => {
+    const fetchPosts = async (query = '', topicId: string | null = selectedTopicId) => {
         try {
-            // if query exists, append ?search=... (Using the new search feature)
-            const url = query ? `/posts?search=${query}` : '/posts';
+            const params: string[] = [];
+            if (query) {
+                params.push(`search=${encodeURIComponent(query)}`);
+            }
+            if (topicId) {
+                params.push(`topic=${encodeURIComponent(topicId)}`);
+            }
+
+            const queryString = params.length ? `?${params.join('&')}` : '';
+            const url = `/posts${queryString}`;
 
             const res = await api.get(url);
             setPosts(res.data.posts);
@@ -37,6 +52,15 @@ export default function FeedPage() {
         } catch (err) {
             console.error("Failed to fetch posts", err);
             navigate('/login');
+        }
+    };
+
+    const fetchTopics = async () => {
+        try {
+            const res = await api.get('/topics');
+            setTopics(res.data.topics);
+        } catch (err) {
+            console.error("Failed to fetch topics", err);
         }
     };
 
@@ -50,7 +74,13 @@ export default function FeedPage() {
             e.preventDefault();
         }
         setLoading(true);
-        fetchPosts(searchQuery);
+        fetchPosts(searchQuery, selectedTopicId);
+    };
+
+    const handleSelectTopic = (topicId: string | null) => {
+        setSelectedTopicId(topicId);
+        setLoading(true);
+        fetchPosts(searchQuery, topicId);
     };
 
     return (
@@ -64,6 +94,39 @@ export default function FeedPage() {
             />
 
             <main className="max-w-4xl mx-auto px-4 py-6">
+                {/* Topic filter pills */}
+                <div className="mb-4 overflow-x-auto">
+                    <div className="flex gap-2 pb-1 min-w-max">
+                        <button
+                            type="button"
+                            onClick={() => handleSelectTopic(null)}
+                            className={`rounded-full px-4 py-1 text-sm transition-colors ${
+                                selectedTopicId === null
+                                    ? 'bg-sky-500 text-white'
+                                    : 'bg-stone-100 dark:bg-stone-800 text-stone-600'
+                            }`}
+                        >
+                            All
+                        </button>
+                        {topics.map((topic) => {
+                            const isSelected = selectedTopicId === String(topic.ID);
+                            return (
+                                <button
+                                    key={topic.ID}
+                                    type="button"
+                                    onClick={() => handleSelectTopic(String(topic.ID))}
+                                    className={`rounded-full px-4 py-1 text-sm transition-colors ${
+                                        isSelected
+                                            ? 'bg-sky-500 text-white'
+                                            : 'bg-stone-100 dark:bg-stone-800 text-stone-600'
+                                    }`}
+                                >
+                                    {topic.Title}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
                 {loading ? (
                     <div className="flex justify-center py-16">
                         <div className="h-8 w-8 rounded-full border-2 border-stone-300 border-t-sky-500 animate-spin" />
@@ -123,7 +186,7 @@ export default function FeedPage() {
             <CreatePostModal 
                 open={isModalOpen} 
                 onClose={() => setIsModalOpen(false)}
-                onPostCreated={() => fetchPosts('')} // reset search on new post
+                onPostCreated={() => fetchPosts('', selectedTopicId)} // respect current topic filter
             />
             
             <TopicManagerModal 

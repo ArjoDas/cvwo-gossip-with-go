@@ -24,7 +24,7 @@ export default function Navbar({
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-stone-200/60 dark:border-stone-800/70 bg-white/70 dark:bg-stone-900/80 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-stone-200 dark:border-stone-800 bg-white/70 dark:bg-stone-900/80 backdrop-blur-md">
       <div className="max-w-4xl mx-auto px-4">
         <div className="flex items-center gap-4 py-3">
           {/* Branding */}
@@ -79,7 +79,7 @@ export default function Navbar({
             <button
               type="button"
               onClick={toggleTheme}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-stone-200/70 dark:border-stone-700 bg-white/70 dark:bg-stone-900/80 text-stone-700 dark:text-stone-200 shadow-sm hover:bg-stone-100/80 dark:hover:bg-stone-800 transition"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-stone-200 dark:border-stone-800 bg-white/70 dark:bg-stone-900/80 text-stone-700 dark:text-stone-200 shadow-sm hover:bg-stone-100/80 dark:hover:bg-stone-800 transition"
               aria-label="Toggle dark mode"
             >
               {mode === 'dark' ? (
@@ -115,7 +115,7 @@ export default function Navbar({
             <button
               type="button"
               onClick={onOpenTopics}
-              className="hidden sm:inline-flex items-center rounded-full border border-stone-200/80 dark:border-stone-700 px-3 py-1.5 text-xs font-medium text-stone-700 dark:text-stone-200 bg-white/70 dark:bg-stone-900/80 hover:bg-stone-100/80 dark:hover:bg-stone-800 transition"
+              className="hidden sm:inline-flex items-center rounded-full border border-stone-200 dark:border-stone-800 px-3 py-1.5 text-xs font-medium text-stone-700 dark:text-stone-200 bg-white/70 dark:bg-stone-900/80 hover:bg-stone-100/80 dark:hover:bg-stone-800 transition"
             >
               Topics
             </button>
@@ -161,7 +161,7 @@ export default function Navbar({
               value={searchQuery}
               onChange={(e) => onSearchQueryChange(e.target.value)}
               placeholder="Search posts..."
-              className="w-full rounded-full border border-stone-200/80 dark:border-stone-700 bg-white/70 dark:bg-stone-900/80 pl-9 pr-4 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/70 focus:border-transparent transition"
+              className="w-full rounded-full border border-stone-200 dark:border-stone-800 bg-white/70 dark:bg-stone-900/80 pl-9 pr-4 py-2 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-400/70 focus:border-transparent transition"
             />
           </div>
         </form>

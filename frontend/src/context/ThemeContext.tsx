@@ -30,11 +30,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const applyTheme = (next: ThemeMode) => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    if (next === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
+    root.classList.toggle('dark', next === 'dark');
   };
 
   const toggleTheme = () => {

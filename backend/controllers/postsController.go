@@ -81,20 +81,30 @@ func CreatePost(c *gin.Context) {
 func GetPosts(c *gin.Context) {
 	var posts []models.Post
 	searchQuery := c.Query("search")
+	topicID := c.Query("topic")
 
 	if searchQuery != "" {
 		// --- SEMANTIC SEARCH ---
 		queryVector, err := getEmbedding(searchQuery)
 
 		if err == nil {
-			// get IDs sorted by Distance using RAW SQL
-			// This bypasses GORM's builder to guarantee the <=> operator is used
 			var ids []uint
 			// We select IDs where embedding exists, ordered by distance
-			if err := initializers.DB.Raw(
-				"SELECT id FROM posts WHERE embedding IS NOT NULL ORDER BY embedding <=> ? LIMIT 10", 
-				queryVector,
-			).Scan(&ids).Error; err != nil {
+			var rawErr error
+			if topicID != "" {
+				rawErr = initializers.DB.Raw(
+					"SELECT id FROM posts WHERE embedding IS NOT NULL AND topic_id = ? ORDER BY embedding <=> ? LIMIT 10",
+					topicID,
+					queryVector,
+				).Scan(&ids).Error
+			} else {
+				rawErr = initializers.DB.Raw(
+					"SELECT id FROM posts WHERE embedding IS NOT NULL ORDER BY embedding <=> ? LIMIT 10",
+					queryVector,
+				).Scan(&ids).Error
+			}
+
+			if rawErr != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 				return
 			}
@@ -131,7 +141,11 @@ func GetPosts(c *gin.Context) {
 		}
 	} else {
 		// --- NORMAL FEED (Chronological) ---
-		initializers.DB.Preload("User").Preload("Topic").Order("created_at desc").Find(&posts)
+		db := initializers.DB.Preload("User").Preload("Topic")
+		if topicID != "" {
+			db = db.Where("topic_id = ?", topicID)
+		}
+		db.Order("created_at desc").Find(&posts)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"posts": posts})
