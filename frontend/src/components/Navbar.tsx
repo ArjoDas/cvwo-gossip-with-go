@@ -1,4 +1,4 @@
-import { FormEvent } from 'react';
+import { type FormEvent } from 'react';
 import { useThemeMode } from '../context/ThemeContext';
 
 interface NavbarProps {
