@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import axios from 'axios';
+import api from '../services/api';
 
 interface Topic {
     ID: number;
@@ -27,7 +27,7 @@ export default function TopicManagerModal({ open, onClose }: Props) {
     }, [open]);
 
     const fetchTopics = async () => {
-        const res = await axios.get('/api/topics');
+        const res = await api.get('/topics');
         setTopics(res.data.topics);
     };
 
@@ -35,10 +35,8 @@ export default function TopicManagerModal({ open, onClose }: Props) {
         if (!newTopic) return;
         const slug = newTopic.toLowerCase().replace(/ /g, '-');
         try {
-            const token = localStorage.getItem('token');
-            await axios.post('/api/topics', 
-                { title: newTopic, slug, description: "User Created" },
-                { headers: { Authorization: `Bearer ${token}` } }
+            await api.post('/topics', 
+                { title: newTopic, slug, description: "User Created" }
             );
             setNewTopic('');
             fetchTopics();
@@ -48,8 +46,7 @@ export default function TopicManagerModal({ open, onClose }: Props) {
     const handleDelete = async (id: number) => {
         if (!confirm("Delete topic?")) return;
         try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`/api/topics/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            await api.delete(`/topics/${id}`);
             fetchTopics();
         } catch (e) { alert("Failed to delete (Topic might have posts attached)"); }
     };
@@ -58,10 +55,8 @@ export default function TopicManagerModal({ open, onClose }: Props) {
         const newTitle = prompt("Edit Topic Title:", topic.Title);
         if (!newTitle) return;
         try {
-            const token = localStorage.getItem('token');
-            await axios.put(`/api/topics/${topic.ID}`, 
-                { title: newTitle, description: topic.Description },
-                { headers: { Authorization: `Bearer ${token}` } }
+            await api.put(`/topics/${topic.ID}`, 
+                { title: newTitle, description: topic.Description }
             );
             fetchTopics();
         } catch (e) { alert("Failed to edit"); }

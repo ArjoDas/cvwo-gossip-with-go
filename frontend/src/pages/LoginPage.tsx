@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Box, Button, TextField, Typography, Paper, Alert, Link as MuiLink } from '@mui/material';
-import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom'; // used to programmatically change the URL (jump to homepage after login)
+import api from '../services/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -15,7 +15,7 @@ const handleLogin = async (e: React.FormEvent) => {
 
     try {
       // capture response
-      const res = await axios.post('/api/login', { email, password });
+      const res = await api.post('/login', { email, password });
       // save the token
       localStorage.setItem('token', res.data.token);
       navigate('/'); 

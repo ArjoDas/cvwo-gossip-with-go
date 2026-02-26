@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Box, Button, TextField, Typography, Paper, Alert, Link as MuiLink } from '@mui/material';
-import axios from 'axios';
+import api from '../services/api';
 import { useNavigate, Link } from 'react-router-dom';
 
 export default function SignupPage() {
@@ -15,7 +15,7 @@ export default function SignupPage() {
     setError('');
 
     try {
-      await axios.post('/api/signup', { username, email, password });
+      await api.post('/signup', { username, email, password });
       navigate('/login'); // redirect to login after signup
     } catch (err) {
       setError('Failed to create account. Username or Email may be taken.');

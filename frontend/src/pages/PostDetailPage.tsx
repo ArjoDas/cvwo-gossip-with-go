@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import axios from 'axios';
+import api from '../services/api';
 
 interface Comment {
     ID: number;
@@ -59,31 +59,27 @@ export default function PostDetailPage() {
     };
 
     const fetchData = async () => {
-    try {
-        const token = localStorage.getItem('token');
-        const headers = { Authorization: `Bearer ${token}` };
+        try {
+            // request both in parallel
+            const [postRes, commentsRes] = await Promise.all([
+                api.get(`/posts/${id}`),
+                api.get(`/posts/${id}/comments`)
+            ]);
 
-        // request both in parallel
-        const [postRes, commentsRes] = await Promise.all([
-        axios.get(`/api/posts/${id}`, { headers }),
-        axios.get(`/api/posts/${id}/comments`, { headers })
-        ]);
-
-        setPost(postRes.data.post);
-        setComments(commentsRes.data.comments);
-        setLoading(false);
-    } catch (err) {
-        console.error("Failed to load data", err);
-        navigate('/');
-    }
+            setPost(postRes.data.post);
+            setComments(commentsRes.data.comments);
+            setLoading(false);
+        } catch (err) {
+            console.error("Failed to load data", err);
+            navigate('/');
+        }
     };
 
     // --- POST ACTIONS ---
     const handleDeletePost = async () => {
         if (!confirm("Are you sure you want to delete this post?")) return;
         try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`/api/posts/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            await api.delete(`/posts/${id}`);
             navigate('/');
         } catch (err) { alert("Failed to delete post"); }
     };
@@ -96,10 +92,8 @@ export default function PostDetailPage() {
         if (newTitle === null || newBody === null) return; // User cancelled
 
         try {
-            const token = localStorage.getItem('token');
-            await axios.put(`/api/posts/${id}`, 
-                { title: newTitle, body: newBody },
-                { headers: { Authorization: `Bearer ${token}` } }
+            await api.put(`/posts/${id}`, 
+                { title: newTitle, body: newBody }
             );
             fetchData(); // refresh UI
         } catch (err) { alert("Failed to edit post"); }
@@ -109,10 +103,8 @@ export default function PostDetailPage() {
     const handleSubmitComment = async () => {
         if (!newComment.trim()) return;
         try {
-            const token = localStorage.getItem('token');
-            await axios.post(`/api/posts/${id}/comments`, 
-                { body: newComment },
-                { headers: { Authorization: `Bearer ${token}` } }
+            await api.post(`/posts/${id}/comments`, 
+                { body: newComment }
             );
             setNewComment('');
             fetchData(); 
@@ -122,8 +114,7 @@ export default function PostDetailPage() {
     const handleDeleteComment = async (commentId: number) => {
         if (!confirm("Delete comment?")) return;
         try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`/api/comments/${commentId}`, { headers: { Authorization: `Bearer ${token}` } });
+            await api.delete(`/comments/${commentId}`);
             fetchData();
         } catch (err) { alert("Failed to delete comment"); }
     };
@@ -133,10 +124,8 @@ export default function PostDetailPage() {
         if (newBody === null) return;
 
         try {
-            const token = localStorage.getItem('token');
-            await axios.put(`/api/comments/${comment.ID}`, 
-                { body: newBody },
-                { headers: { Authorization: `Bearer ${token}` } }
+            await api.put(`/comments/${comment.ID}`, 
+                { body: newBody }
             );
             fetchData();
         } catch (err) { alert("Failed to edit comment"); }

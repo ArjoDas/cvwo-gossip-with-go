@@ -7,7 +7,7 @@ import AddIcon from '@mui/icons-material/Add';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SearchIcon from '@mui/icons-material/Search';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'; // Icon for Topics
-import axios from 'axios';
+import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import CreatePostModal from '../components/CreatePostModal';
 import TopicManagerModal from '../components/TopicManagerModal';
@@ -35,18 +35,10 @@ export default function FeedPage() {
 
     const fetchPosts = async (query = '') => {
         try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                navigate('/login');
-                return;
-            }
-
             // if query exists, append ?search=... (Using the new search feature)
-            const url = query ? `/api/posts?search=${query}` : '/api/posts';
+            const url = query ? `/posts?search=${query}` : '/posts';
 
-            const res = await axios.get(url, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.get(url);
             setPosts(res.data.posts);
             setLoading(false);
         } catch (err) {

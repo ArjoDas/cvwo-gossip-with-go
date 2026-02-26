@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button, TextField, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem } from '@mui/material'; // Added MenuItem
-import axios from 'axios';
+import api from '../services/api';
 
 interface CreatePostModalProps {
     open: boolean;
@@ -23,7 +23,7 @@ export default function CreatePostModal({ open, onClose, onPostCreated }: Create
     // Fetch topics when modal opens
     useEffect(() => {
         if (open) {
-            axios.get('/api/topics')
+            api.get('/topics')
                 .then(res => setTopics(res.data.topics))
                 .catch(err => console.error("Failed to load topics", err));
         }
@@ -32,14 +32,12 @@ export default function CreatePostModal({ open, onClose, onPostCreated }: Create
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            await axios.post('/api/posts', 
+            await api.post('/posts', 
                 { 
                     title, 
                     body, 
                     TopicID: Number(topicId) // Send the chosen TopicID
-                },
-                { headers: { Authorization: `Bearer ${token}` } }
+                }
             );
             
             setTitle('');
