@@ -17,7 +17,16 @@ func init() {
 
 func main() {
 	r := gin.Default()    // the web server
-	r.Use(cors.Default()) // enables x origin communication
+	// r.Use(cors.Default()) // enables x origin communication
+	r.Use(cors.New(cors.Config{
+		// Add your actual Vercel deployment URL here
+		AllowOrigins:     []string{"http://localhost:5173", "https://cvwo-gossip-with-go.vercel.app", "https://cvwo-gwg.arjodas.com/"}, 
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// checks and synchronizes Go structs to loaded DB. structs are the source of truth
 	initializers.DB.AutoMigrate(
